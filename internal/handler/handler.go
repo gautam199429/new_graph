@@ -150,8 +150,8 @@ func ParseGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewEncoder(w).Encode(responseSuccess); err != nil {
 		response := map[string]interface{}{
-			"status":  err.Error(),
-			"message": "Error parsing json",
+			"status":  "error",
+			"message": err.Error(),
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
