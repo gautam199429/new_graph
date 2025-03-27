@@ -135,25 +135,33 @@ func splitPoliciesAndRemoveSpace(policies string, delimeter string) []string {
 }
 
 func processJsonData(jsonStr string, Policy string, FieldsMap map[string]string) (JSONMap, error) {
-	policies := splitPoliciesAndRemoveSpace(Policy, ".")
-	fmt.Println(policies)
-	var customerKeys []string
-	for key, value := range FieldsMap {
-		if value == policies[0] {
-			customerKeys = append(customerKeys, key)
-		}
-	}
 	var data JSONMap
 	err := json.Unmarshal([]byte(jsonStr), &data)
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Println("Keys with value 'Customer':", customerKeys)
-	if dataField, ok := data["data"].(map[string]interface{}); ok {
-		if keys, exists := dataField[customerKeys[0]].(map[string]interface{}); exists {
-			delete(keys, policies[1])
+	policies := splitPoliciesAndRemoveSpace(Policy, ".")
+	if len(policies) == 2 {
+		fmt.Println(policies)
+		var customerKeys []string
+		for key, value := range FieldsMap {
+			if value == policies[0] {
+				customerKeys = append(customerKeys, key)
+			}
 		}
+		fmt.Println("Keys with value 'Customer':", customerKeys)
+		if dataField, ok := data["data"].(map[string]interface{}); ok {
+			if keys, exists := dataField[customerKeys[0]].(map[string]interface{}); exists {
+				delete(keys, policies[1])
+			}
+		}
+		return data, nil
 	}
-	return data, nil
+	if len(policies) == 1 {
+		if dataField, ok := data["data"].(map[string]interface{}); ok {
+			delete(dataField, policies[0])
+		}
+		return data, nil
+	}
+	return nil, fmt.Errorf("invalid policy")
 }
