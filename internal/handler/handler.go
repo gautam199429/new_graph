@@ -93,7 +93,13 @@ func DeleteUser(w http.ResponseWriter, r *http.Request) {
 func ParseGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	authHeader := r.Header.Get("Policies")
 	if authHeader == "" {
-		http.Error(w, "Missing Policies header", http.StatusBadRequest)
+		response := map[string]interface{}{
+			"status":  "error",
+			"message": "Missing Policies header",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 	policies := splitPoliciesAndRemoveSpace(authHeader, ",")
@@ -101,7 +107,13 @@ func ParseGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
-		http.Error(w, "Error reading request body", http.StatusBadRequest)
+		response := map[string]interface{}{
+			"status":  "error",
+			"message": "Error reading request body",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 	apiRequestBody := string(body)
@@ -109,19 +121,41 @@ func ParseGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	typeMap, allFieldMap, err := utility.ParseSchema()
 	fmt.Println(typeMap)
 	if err != nil {
-		fmt.Println(err.Error())
-		http.Error(w, "Error parsing schema", http.StatusBadRequest)
+		response := map[string]interface{}{
+			"status":  "error",
+			"message": "Error parsing schema",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 	data, err := processJsonData(apiRequestBody, authHeader, allFieldMap)
 	if err != nil {
-		fmt.Println(err.Error())
-		http.Error(w, "Error parsing json", http.StatusBadRequest)
+		response := map[string]interface{}{
+			"status":  "error",
+			"message": "Error parsing json",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		http.Error(w, fmt.Sprintf("Error encoding JSON response: %s", err.Error()), http.StatusInternalServerError)
+	w.WriteHeader(http.StatusOK)
+	responseSuccess := map[string]interface{}{
+		"status":  "success",
+		"data":    data["data"],
+		"message": "Successfully parsed json",
+	}
+	if err := json.NewEncoder(w).Encode(responseSuccess); err != nil {
+		response := map[string]interface{}{
+			"status":  err.Error(),
+			"message": "Error parsing json",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 }
