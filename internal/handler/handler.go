@@ -19,7 +19,7 @@ import (
 
 type TypeMap map[string]map[string]string
 
-type JSONMap map[string]interface{}
+type JSONMap map[string]any
 
 var users = []model.User{
 	{ID: 1, Name: "John Doe"},
@@ -93,7 +93,7 @@ func DeleteUser(w http.ResponseWriter, r *http.Request) {
 func ParseGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	authHeader := r.Header.Get("Policies")
 	if authHeader == "" {
-		response := map[string]interface{}{
+		response := map[string]any{
 			"status":  "error",
 			"message": "Missing Policies header",
 		}
@@ -107,7 +107,7 @@ func ParseGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
-		response := map[string]interface{}{
+		response := map[string]any{
 			"status":  "error",
 			"message": "Error reading request body",
 		}
@@ -121,7 +121,7 @@ func ParseGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	typeMap, allFieldMap, err := utility.ParseSchema()
 	fmt.Println(typeMap)
 	if err != nil {
-		response := map[string]interface{}{
+		response := map[string]any{
 			"status":  "error",
 			"message": "Error parsing schema",
 		}
@@ -132,7 +132,7 @@ func ParseGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	}
 	data, err := processJsonData(apiRequestBody, authHeader, allFieldMap)
 	if err != nil {
-		response := map[string]interface{}{
+		response := map[string]any{
 			"status":  "error",
 			"message": err.Error(),
 		}
@@ -143,13 +143,13 @@ func ParseGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	responseSuccess := map[string]interface{}{
+	responseSuccess := map[string]any{
 		"status":  "success",
 		"data":    data["data"],
 		"message": "Successfully parsed json",
 	}
 	if err := json.NewEncoder(w).Encode(responseSuccess); err != nil {
-		response := map[string]interface{}{
+		response := map[string]any{
 			"status":  "error",
 			"message": err.Error(),
 		}
@@ -184,15 +184,15 @@ func processJsonData(jsonStr string, Policy string, FieldsMap map[string]string)
 			}
 		}
 		fmt.Println("Keys with value 'Customer':", customerKeys)
-		if dataField, ok := data["data"].(map[string]interface{}); ok {
-			if keys, exists := dataField[customerKeys[0]].(map[string]interface{}); exists {
+		if dataField, ok := data["data"].(map[string]any); ok {
+			if keys, exists := dataField[customerKeys[0]].(map[string]any); exists {
 				delete(keys, policies[1])
 			}
 		}
 		return data, nil
 	}
 	if len(policies) == 1 {
-		if dataField, ok := data["data"].(map[string]interface{}); ok {
+		if dataField, ok := data["data"].(map[string]any); ok {
 			delete(dataField, policies[0])
 		}
 		return data, nil
