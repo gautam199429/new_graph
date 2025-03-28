@@ -218,37 +218,15 @@ func processJsonData(jsonStr JSONMap, Policy string, FieldsMap map[string]string
 	}
 
 	policies := splitPoliciesAndRemoveSpace(Policy, ".")
-	if len(policies) == 2 {
 
-		if policies[0] == "Query" {
-
-		}
-
-		var customerKeys []string
-		for key, value := range FieldsMap {
-			if value == policies[0] {
-				customerKeys = append(customerKeys, key)
-			}
-		}
-		if len(customerKeys) == 0 {
-			return nil, fmt.Errorf("no matching keys found for policy: %s", policies[0])
-		}
-		if dataField, ok := jsonStr["data"].(map[string]any); ok {
-			if keys, exists := dataField[customerKeys[0]].(map[string]any); exists {
-				delete(keys, policies[1])
-			} else {
-				return nil, fmt.Errorf("key '%s' not found in data", customerKeys[0])
-			}
-		} else {
-			return nil, fmt.Errorf("data field is not a valid map")
-		}
-		return jsonStr, nil
+	if len(policies) > 2 {
+		return nil, fmt.Errorf("invalid policy format")
 	}
 
-	if len(policies) == 1 {
+	if policies[0] == "Query" {
 		if dataField, ok := jsonStr["data"].(map[string]any); ok {
-			if _, exists := dataField[policies[0]]; exists {
-				delete(dataField, policies[0])
+			if _, exists := dataField[policies[1]]; exists {
+				delete(dataField, policies[1])
 			} else {
 				return nil, fmt.Errorf("key '%s' not found in data", policies[0])
 			}
@@ -257,6 +235,23 @@ func processJsonData(jsonStr JSONMap, Policy string, FieldsMap map[string]string
 		}
 		return jsonStr, nil
 	}
-
-	return nil, fmt.Errorf("invalid policy format")
+	var customerKeys []string
+	for key, value := range FieldsMap {
+		if value == policies[0] {
+			customerKeys = append(customerKeys, key)
+		}
+	}
+	if len(customerKeys) == 0 {
+		return nil, fmt.Errorf("no matching keys found for policy: %s", policies[0])
+	}
+	if dataField, ok := jsonStr["data"].(map[string]any); ok {
+		if keys, exists := dataField[customerKeys[0]].(map[string]any); exists {
+			delete(keys, policies[1])
+		} else {
+			return nil, fmt.Errorf("key '%s' not found in data", customerKeys[0])
+		}
+	} else {
+		return nil, fmt.Errorf("data field is not a valid map")
+	}
+	return jsonStr, nil
 }
