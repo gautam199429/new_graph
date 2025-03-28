@@ -91,6 +91,7 @@ func DeleteUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func ParseGraphQLQuery(w http.ResponseWriter, r *http.Request) {
+	// Checking if the request has the Policies header
 	authHeader := r.Header.Get("Policies")
 	if authHeader == "" {
 		response := map[string]any{
@@ -102,8 +103,8 @@ func ParseGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	policies := splitPoliciesAndRemoveSpace(authHeader, ",")
-	fmt.Println(policies)
+
+	// Reading the request body
 	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
@@ -117,46 +118,86 @@ func ParseGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiRequestBody := string(body)
-	fmt.Println(apiRequestBody)
-	typeMap, allFieldMap, err := utility.ParseSchema()
-	fmt.Println(typeMap)
-	if err != nil {
+	if apiRequestBody == "" {
 		response := map[string]any{
 			"status":  "error",
-			"message": "Error parsing schema",
+			"message": "Request body cannot be empty",
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	data, err := processJsonData(apiRequestBody, authHeader, allFieldMap)
+
+	// Parsing the schema
+	_, allFieldMap, err := utility.ParseSchema()
 	if err != nil {
 		response := map[string]any{
 			"status":  "error",
-			"message": err.Error(),
+			"message": "Error parsing schema: " + err.Error(),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Splitting the policies and removing spaces
+	policies := splitPoliciesAndRemoveSpace(authHeader, ",")
+	if len(policies) == 0 {
+		response := map[string]any{
+			"status":  "error",
+			"message": "No valid policies provided",
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+
+	var data JSONMap
+	err = json.Unmarshal([]byte(apiRequestBody), &data)
+	if err != nil {
+		response := map[string]any{
+			"status":  "error",
+			"message": "Error parsing JSON body: " + err.Error(),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Processing the JSON data
+	for _, value := range policies {
+		data, err = processJsonData(data, value, allFieldMap)
+		if err != nil {
+			response := map[string]any{
+				"status":  "error",
+				"message": "Error processing policy: " + err.Error(),
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	responseSuccess := map[string]any{
 		"status":  "success",
 		"data":    data["data"],
-		"message": "Successfully parsed json",
+		"message": "Successfully parsed JSON",
 	}
 	if err := json.NewEncoder(w).Encode(responseSuccess); err != nil {
 		response := map[string]any{
 			"status":  "error",
-			"message": err.Error(),
+			"message": "Error encoding response: " + err.Error(),
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(response)
-		return
 	}
 }
 
@@ -168,34 +209,49 @@ func splitPoliciesAndRemoveSpace(policies string, delimeter string) []string {
 	return parts
 }
 
-func processJsonData(jsonStr string, Policy string, FieldsMap map[string]string) (JSONMap, error) {
-	var data JSONMap
-	err := json.Unmarshal([]byte(jsonStr), &data)
-	if err != nil {
-		return nil, err
+func processJsonData(jsonStr JSONMap, Policy string, FieldsMap map[string]string) (JSONMap, error) {
+	if jsonStr == nil {
+		return nil, fmt.Errorf("input JSON data is nil")
 	}
+	if Policy == "" {
+		return nil, fmt.Errorf("policy cannot be empty")
+	}
+
 	policies := splitPoliciesAndRemoveSpace(Policy, ".")
 	if len(policies) == 2 {
-		fmt.Println(policies)
 		var customerKeys []string
 		for key, value := range FieldsMap {
 			if value == policies[0] {
 				customerKeys = append(customerKeys, key)
 			}
 		}
-		fmt.Println("Keys with value 'Customer':", customerKeys)
-		if dataField, ok := data["data"].(map[string]any); ok {
+		if len(customerKeys) == 0 {
+			return nil, fmt.Errorf("no matching keys found for policy: %s", policies[0])
+		}
+		if dataField, ok := jsonStr["data"].(map[string]any); ok {
 			if keys, exists := dataField[customerKeys[0]].(map[string]any); exists {
 				delete(keys, policies[1])
+			} else {
+				return nil, fmt.Errorf("key '%s' not found in data", customerKeys[0])
 			}
+		} else {
+			return nil, fmt.Errorf("data field is not a valid map")
 		}
-		return data, nil
+		return jsonStr, nil
 	}
+
 	if len(policies) == 1 {
-		if dataField, ok := data["data"].(map[string]any); ok {
-			delete(dataField, policies[0])
+		if dataField, ok := jsonStr["data"].(map[string]any); ok {
+			if _, exists := dataField[policies[0]]; exists {
+				delete(dataField, policies[0])
+			} else {
+				return nil, fmt.Errorf("key '%s' not found in data", policies[0])
+			}
+		} else {
+			return nil, fmt.Errorf("data field is not a valid map")
 		}
-		return data, nil
+		return jsonStr, nil
 	}
-	return nil, fmt.Errorf("invalid policy")
+
+	return nil, fmt.Errorf("invalid policy format")
 }
