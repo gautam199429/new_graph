@@ -219,6 +219,11 @@ func processJsonData(jsonStr JSONMap, Policy string, FieldsMap map[string]string
 
 	policies := splitPoliciesAndRemoveSpace(Policy, ".")
 	if len(policies) == 2 {
+
+		if policies[0] == "Query" {
+
+		}
+
 		var customerKeys []string
 		for key, value := range FieldsMap {
 			if value == policies[0] {
