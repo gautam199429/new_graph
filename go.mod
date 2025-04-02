@@ -7,4 +7,7 @@ require (
 	github.com/vektah/gqlparser/v2 v2.5.23
 )
 
-require github.com/agnivade/levenshtein v1.2.1 // indirect
+require (
+	github.com/agnivade/levenshtein v1.2.1 // indirect
+	github.com/oliveagle/jsonpath v0.0.0-20180606110733-2e52cf6e6852
+)

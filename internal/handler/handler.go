@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"entitlements/internal/model"
@@ -15,6 +16,8 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
+
+	"github.com/oliveagle/jsonpath"
 )
 
 type TypeMap map[string]map[string]string
@@ -186,9 +189,10 @@ func ParseGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	responseSuccess := map[string]any{
-		"status":  "success",
-		"data":    data["data"],
-		"message": "Successfully parsed JSON",
+		"status":   "success",
+		"data":     data["data"],
+		"allfield": allFieldMap,
+		"message":  "Successfully parsed JSON",
 	}
 	if err := json.NewEncoder(w).Encode(responseSuccess); err != nil {
 		response := map[string]any{
@@ -234,24 +238,89 @@ func processJsonData(jsonStr JSONMap, Policy string, FieldsMap map[string]string
 			return nil, fmt.Errorf("data field is not a valid map")
 		}
 		return jsonStr, nil
-	}
-	var customerKeys []string
-	for key, value := range FieldsMap {
-		if value == policies[0] {
-			customerKeys = append(customerKeys, key)
-		}
-	}
-	if len(customerKeys) == 0 {
-		return nil, fmt.Errorf("no matching keys found for policy: %s", policies[0])
-	}
-	if dataField, ok := jsonStr["data"].(map[string]any); ok {
-		if keys, exists := dataField[customerKeys[0]].(map[string]any); exists {
-			delete(keys, policies[1])
-		} else {
-			return nil, fmt.Errorf("key '%s' not found in data", customerKeys[0])
-		}
 	} else {
-		return nil, fmt.Errorf("data field is not a valid map")
+		var customerKeys []string
+		for key, value := range FieldsMap {
+			if value == policies[0] {
+				customerKeys = append(customerKeys, key)
+			}
+		}
+		fmt.Println("Customer Keys:", customerKeys)
+		fmt.Println("Policies:", policies)
+		allKeys := collectKeys(jsonStr, "")
+
+		if len(customerKeys) == 0 {
+			return nil, fmt.Errorf("no matching keys found for policy: %s", policies[0])
+		}
+
+		for _, key := range allKeys {
+			keys := splitPoliciesAndRemoveSpace(key, ".")
+			if len(keys) > 1 {
+				lastkey := keys[len(keys)-1]
+				secondLastKey := keys[len(keys)-2]
+				if removeArrayIndices(lastkey) == policies[1] && removeArrayIndices(secondLastKey) == customerKeys[0] {
+					fmt.Println("Deleting key:", key)
+					err := deleteJSONPath(jsonStr, key)
+					if err != nil {
+						fmt.Println(err.Error())
+					}
+					fmt.Println(jsonStr)
+				}
+			}
+		}
+		return jsonStr, nil
 	}
-	return jsonStr, nil
+}
+
+func collectKeys(m map[string]interface{}, prefix string) []string {
+	var keys []string
+	for key, value := range m {
+		fullKey := key
+		if prefix != "" {
+			fullKey = prefix + "." + key
+		}
+		keys = append(keys, fullKey)
+		switch v := value.(type) {
+		case map[string]interface{}:
+			keys = append(keys, collectKeys(v, fullKey)...)
+		case []interface{}:
+			for i, item := range v {
+				if obj, ok := item.(map[string]interface{}); ok {
+					keys = append(keys, collectKeys(obj, fmt.Sprintf("%s[%d]", fullKey, i))...)
+				}
+			}
+		}
+	}
+	return keys
+}
+
+func removeArrayIndices(input string) string {
+	re := regexp.MustCompile(`\[\d+\]`)
+	return re.ReplaceAllString(input, "")
+}
+
+func deleteJSONPath(jsonMap map[string]any, path string) error {
+
+	if !strings.HasPrefix(path, "$") {
+		path = "$" + path
+	}
+
+	// Find parent structure
+	parentPath := path[:len(path)-len(path[strings.LastIndex(path, ".")+1:])-1]
+	jp, err := jsonpath.Compile(parentPath)
+	if err != nil {
+		return err
+	}
+	parent, err := jp.Lookup(jsonMap)
+	if err != nil {
+		return err
+	}
+
+	// Remove key if parent is a map
+	if parentMap, ok := parent.(map[string]any); ok {
+		key := path[strings.LastIndex(path, ".")+1:]
+		delete(parentMap, key)
+	}
+
+	return nil
 }
