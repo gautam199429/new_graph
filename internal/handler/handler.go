@@ -171,9 +171,12 @@ func ParseGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Coleting all keys from the JSON data
+	allKeys := collectKeys(data, "")
+
 	// Processing the JSON data
 	for _, value := range policies {
-		data, err = processJsonData(data, value, allFieldMap)
+		data, err = processJsonData(data, value, allFieldMap, allKeys)
 		if err != nil {
 			response := map[string]any{
 				"status":  "error",
@@ -213,7 +216,7 @@ func splitPoliciesAndRemoveSpace(policies string, delimeter string) []string {
 	return parts
 }
 
-func processJsonData(jsonStr JSONMap, Policy string, FieldsMap map[string]string) (JSONMap, error) {
+func processJsonData(jsonStr JSONMap, Policy string, FieldsMap map[string]string, allKeys []string) (JSONMap, error) {
 	if jsonStr == nil {
 		return nil, fmt.Errorf("input JSON data is nil")
 	}
@@ -223,7 +226,7 @@ func processJsonData(jsonStr JSONMap, Policy string, FieldsMap map[string]string
 
 	policies := splitPoliciesAndRemoveSpace(Policy, ".")
 
-	if len(policies) > 2 {
+	if len(policies) > 2 || len(policies) <= 1 {
 		return nil, fmt.Errorf("invalid policy format")
 	}
 
@@ -247,13 +250,12 @@ func processJsonData(jsonStr JSONMap, Policy string, FieldsMap map[string]string
 		}
 		fmt.Println("Customer Keys:", customerKeys)
 		fmt.Println("Policies:", policies)
-		allKeys := collectKeys(jsonStr, "")
-
 		if len(customerKeys) == 0 {
 			return nil, fmt.Errorf("no matching keys found for policy: %s", policies[0])
 		}
 
 		for _, key := range allKeys {
+			fmt.Println("Key:", key)
 			keys := splitPoliciesAndRemoveSpace(key, ".")
 			if len(keys) > 1 {
 				lastkey := keys[len(keys)-1]
@@ -264,7 +266,6 @@ func processJsonData(jsonStr JSONMap, Policy string, FieldsMap map[string]string
 					if err != nil {
 						fmt.Println(err.Error())
 					}
-					fmt.Println(jsonStr)
 				}
 			}
 		}
