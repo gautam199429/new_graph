@@ -27,11 +27,7 @@ func traverseAndRedactMultiple(
 
 		if fieldsToDelete, ok := policy[typename]; ok {
 			for _, field := range fieldsToDelete {
-				if cleanKey == field || currentPath == typename+"."+field {
-					fmt.Println("Deleting:", currentPath)
-					delete(m, key)
-					goto NEXT_KEY
-				}
+				delete(m, field)
 			}
 		}
 
@@ -50,8 +46,6 @@ func traverseAndRedactMultiple(
 			}
 			m[key] = v
 		}
-
-	NEXT_KEY:
 	}
 }
 
@@ -151,11 +145,12 @@ func main() {
 
 	// Define the policy: delete multiple fields
 	policy := map[string][]string{
-		"Customer": {"accounts"},
+		"Customer":              {"accounts"},
+		"AvailableCreditAmount": {"availableSpendingCreditAmount", "availableCashCreditAmount"},
 	}
 
 	// Call function to remove based on header policy
-	traverseAndRedactMultiple(jsonData, "data", fieldMap, policy, "")
+	traverseAndRedactMultiple(jsonData["data"].(map[string]interface{}), "data", fieldMap, policy, "")
 
 	// Pretty print the final redacted JSON
 	finalJSON, _ := json.MarshalIndent(jsonData, "", "  ")
