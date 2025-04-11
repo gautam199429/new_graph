@@ -33,11 +33,7 @@ func traverseAndRedactMultiple(
 
 		switch v := value.(type) {
 		case map[string]interface{}:
-			newType := fieldMap[key]
-			if newType == "" {
-				newType = typename
-			}
-			traverseAndRedactMultiple(v, currentPath, fieldMap, policy, newType)
+			traverseAndRedactMultiple(v, currentPath, fieldMap, policy, fieldMap[key])
 		case []interface{}:
 			for i, item := range v {
 				if obj, ok := item.(map[string]interface{}); ok {
