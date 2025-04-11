@@ -255,7 +255,6 @@ func processJsonData(jsonStr JSONMap, Policy string, FieldsMap map[string]string
 		}
 
 		for _, key := range allKeys {
-			fmt.Println("Key:", key)
 			keys := splitPoliciesAndRemoveSpace(key, ".")
 			if len(keys) > 1 {
 				lastkey := keys[len(keys)-1]
@@ -308,11 +307,13 @@ func deleteJSONPath(jsonMap map[string]any, path string) error {
 
 	// Find parent structure
 	parentPath := path[:len(path)-len(path[strings.LastIndex(path, ".")+1:])-1]
+	fmt.Println("Parent Path:", parentPath)
 	jp, err := jsonpath.Compile(parentPath)
 	if err != nil {
 		return err
 	}
 	parent, err := jp.Lookup(jsonMap)
+	fmt.Println("Parent:", parent)
 	if err != nil {
 		return err
 	}
@@ -324,4 +325,45 @@ func deleteJSONPath(jsonMap map[string]any, path string) error {
 	}
 
 	return nil
+}
+
+func traverseAndRedactMultiple(
+	m map[string]interface{},
+	fieldMap map[string]string,
+	policy map[string][]string,
+	path string,
+) {
+	for key, value := range m {
+		cleanKey := removeArrayIndices(key)
+		currentPath := fmt.Sprintf("%s.%s", path, key)
+
+		// Find the type from fieldMap
+		currentType := ""
+		if t, ok := fieldMap[key]; ok {
+			currentType = t
+		}
+
+		// Check if this type+field is in the policy
+		if fieldsToDelete, ok := policy[currentType]; ok {
+			for _, field := range fieldsToDelete {
+				if cleanKey == field {
+					fmt.Println("Deleting:", currentPath)
+					delete(m, key)
+					continue
+				}
+			}
+		}
+
+		// Recursive traversal
+		switch v := value.(type) {
+		case map[string]interface{}:
+			traverseAndRedactMultiple(v, fieldMap, policy, currentPath)
+		case []interface{}:
+			for idx, item := range v {
+				if obj, ok := item.(map[string]interface{}); ok {
+					traverseAndRedactMultiple(obj, fieldMap, policy, fmt.Sprintf("%s[%d]", currentPath, idx))
+				}
+			}
+		}
+	}
 }
